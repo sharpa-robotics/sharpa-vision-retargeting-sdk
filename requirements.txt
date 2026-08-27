@@ -1,0 +1,20 @@
+# Python dependencies for Sharpa Wave webcam teleop.
+# Install:  pip install -r requirements.txt
+#
+# Still install separately (not on public PyPI / may need conda):
+#   - sharpa     (Sharpa Wave SDK .deb / vendor wheel)
+#   - pinocchio  (if `pip` cannot install `pin`; prefer conda-forge)
+#
+# dex-retargeting is pulled from GitHub below (brings pin/nlopt when available).
+
+numpy>=2.0
+opencv-python>=4.8
+mediapipe>=0.10.9
+tyro>=0.6
+loguru>=0.7
+torch>=2.0
+matplotlib>=3.7
+PyYAML>=6.0
+
+# Hand retargeting library (https://github.com/dexsuite/dex-retargeting)
+dex-retargeting @ git+https://github.com/dexsuite/dex-retargeting.git@v0.5.0

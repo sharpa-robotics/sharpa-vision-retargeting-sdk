@@ -1,0 +1,58 @@
+retargeting:
+  type: vector
+  urdf_path: left_sharpa_wave_with_wrist.urdf
+
+
+  target_origin_link_names: [ 
+    "left_hand_C_MC",
+    "left_hand_C_MC",
+    "left_hand_C_MC",
+    "left_hand_C_MC",
+    "left_hand_C_MC",
+    "left_hand_C_MC",
+    "left_thumb_MC",
+    "left_index_PP", 
+    "left_middle_PP", 
+    "left_ring_PP", 
+    "left_pinky_PP",
+    "left_thumb_DP", 
+    "left_index_DP", 
+    "left_middle_DP", 
+    "left_ring_DP", 
+    "left_pinky_DP", 
+  ]
+  
+
+  target_task_link_names: [ 
+    "left_thumb_fingertip", 
+    "left_index_fingertip", 
+    "left_middle_fingertip", 
+    "left_ring_fingertip", 
+    "left_pinky_fingertip",
+    "left_thumb_MC",
+    "left_thumb_DP", 
+    "left_index_DP", 
+    "left_middle_DP", 
+    "left_ring_DP", 
+    "left_pinky_DP",
+    "left_thumb_fingertip", 
+    "left_index_fingertip", 
+    "left_middle_fingertip", 
+    "left_ring_fingertip", 
+    "left_pinky_fingertip", 
+    
+  ]
+  
+  scaling_factor: 1.0
+  
+  target_link_human_indices: [ 
+    [0, 0,  0,  0,  0, 0, 2, 6, 10, 14, 18, 3, 7, 11, 15, 19], 
+    [4, 8, 12, 16, 20, 2, 3, 7, 11, 15, 19, 4, 8, 12, 16, 20] 
+  ]
+
+  low_pass_alpha: 0.4
+  
+  
+  
+  
+  
