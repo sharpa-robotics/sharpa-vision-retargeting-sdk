@@ -1,16 +1,16 @@
 """Per-hand teleop state and SDK helpers for Sharpa Wave webcam control.
 
 Pipeline per frame:
-  align → calibration.apply → [right flip] → [landmark scale if YAML 1.0] → retarget
+  align → calibration.apply → [right flip] → landmark scale → retarget
 
-When YAML ``scaling_factor == 1.0``, frozen palm-span and per-finger MCP→tip
-scales are computed once from calibration neutral vs URDF and applied before
-retargeting (optimizer scaling stays 1.0).
+Frozen scales are computed once from the calibration neutral pose versus URDF
+link lengths:
+  - one uniform palm scale from index–pinky knuckle span (wrist → MCPs)
+  - one scale per finger from MCP→fingertip (applied to the whole finger chain)
 
-When ``scaling_factor`` is any other value, landmark scaling is skipped and
-the YAML factor is passed through to dex-retargeting unchanged.
-
-Wireframe / snapshots use post-calibration landmarks (before landmark scaling).
+YAML ``scaling_factor`` is forced to 1.0 so these landmark scales alone size
+the hand for retargeting. Wireframe / snapshots use post-calibration landmarks
+(before landmark scaling).
 """
 
 from __future__ import annotations
@@ -442,9 +442,22 @@ def scale_hand_chain(
     return out
 
 
+def _disable_yaml_scaling_factor(retargeting) -> None:
+    """Force dex-retargeting optimizer.scaling to 1.0 (landmark scales own sizing)."""
+    opt = getattr(retargeting, "optimizer", None)
+    if opt is not None and hasattr(opt, "scaling"):
+        old = float(opt.scaling)
+        opt.scaling = 1.0
+        if abs(old - 1.0) > 1e-9:
+            logger.info(
+                f"Overrode optimizer.scaling {old:.3f} → 1.0 "
+                "(palm/finger landmark scales control size)"
+            )
+
+
 @dataclass
 class TeleopHand:
-    """One hand: calibrate → [landmark-scale if YAML 1.0] → retarget → command."""
+    """One hand: calibrate → landmark-scale → retarget → command."""
 
     side: HandSideName
     config_path: str
@@ -457,8 +470,7 @@ class TeleopHand:
     calibration: HandCalibration
     mediapipe_label: str
     operator2mano: np.ndarray
-    use_landmark_scaling: bool
-    scales: Optional[HandScaleFactors] = None
+    scales: HandScaleFactors
     wave: Optional[object] = None
     device_sn: Optional[str] = None
     visualizer: Optional["HandVisualizer"] = field(default=None, repr=False)
@@ -490,14 +502,7 @@ class TeleopHand:
             corrected_array[:, 0] *= -1
             corrected_array[:, 1] *= -1
 
-        if self.use_landmark_scaling:
-            if self.scales is None:
-                raise RuntimeError(
-                    f"{self.side}: landmark scaling enabled but scales missing"
-                )
-            retarget_landmarks = scale_hand_chain(corrected_array, self.scales)
-        else:
-            retarget_landmarks = corrected_array
+        retarget_landmarks = scale_hand_chain(corrected_array, self.scales)
         qpos = self.process_frame(retarget_landmarks)
         return corrected_array, qpos
 
@@ -533,9 +538,8 @@ def build_teleop_hand(
     robot_dir = resolve_robot_dir(side, base_robot_dir)
     RetargetingConfig.set_default_urdf_dir(str(robot_dir))
     logger.info(f"Loading {side} retargeting from {config_path} (urdf dir {robot_dir})")
-    config = RetargetingConfig.load_from_file(config_path)
-    retargeting = config.build()
-    use_landmark_scaling = config.scaling_factor == 1.0
+    retargeting = RetargetingConfig.load_from_file(config_path).build()
+    _disable_yaml_scaling_factor(retargeting)
 
     retargeting_type = retargeting.optimizer.retargeting_type
     target_link_human_indices = retargeting.optimizer.target_link_human_indices
@@ -546,22 +550,15 @@ def build_teleop_hand(
         dtype=int,
     )
 
-    scales: Optional[HandScaleFactors] = None
-    if use_landmark_scaling:
-        # Lengths from the same space used at runtime (post-apply, pre right-flip).
-        corrected_neutral = calibration.apply(calibration.neutral_landmarks.copy())
-        scales = compute_hand_scale_factors(
-            side,
-            corrected_neutral,
-            retargeting.optimizer.robot,
-        )
-        for line in scales.summary_lines():
-            logger.info(f"{side} {line}")
-    else:
-        logger.info(
-            f"{side} using YAML scaling_factor={config.scaling_factor} "
-            "(landmark scaling disabled)"
-        )
+    # Lengths from the same space used at runtime (post-apply, pre right-flip).
+    corrected_neutral = calibration.apply(calibration.neutral_landmarks.copy())
+    scales = compute_hand_scale_factors(
+        side,
+        corrected_neutral,
+        retargeting.optimizer.robot,
+    )
+    for line in scales.summary_lines():
+        logger.info(f"{side} {line}")
 
     return TeleopHand(
         side=side,
@@ -575,7 +572,6 @@ def build_teleop_hand(
         calibration=calibration,
         mediapipe_label=mediapipe_label_for_side(side),
         operator2mano=operator2mano_for_side(side),
-        use_landmark_scaling=use_landmark_scaling,
         scales=scales,
         wave=wave,
         device_sn=device_sn,

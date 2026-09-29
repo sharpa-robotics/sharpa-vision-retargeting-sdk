@@ -12,16 +12,17 @@ vision-teleop/
 ├── sharpa_wave_quest.py             # entry point
 ├── requirements.txt
 ├── README.md
-├── Sharpa Wave Vision Based TeleOp Control Documentation.pdf
-├── supplements/                       # shared code, YAML, MediaPipe model
+├── Sharpa Wave Vision TeleOp Control Documentation.pdf
+├── supplements/                       # shared code and YAML
 │   ├── teleop_hand.py                 # Wave connect, landmark scales, TeleopHand
 │   ├── hand_calibration.py
 │   ├── hand_visualization.py
 │   ├── single_hand_detector.py
 │   ├── frame_queue_utils.py
 │   ├── sharpa_wave_left.yml
-│   ├── sharpa_wave_right.yml
-│   └── hand_landmarker.task
+│   └── sharpa_wave_right.yml
+├── scripts/
+│   └── download_hand_landmarker.py    # downloads and verifies the MediaPipe model
 ├── sharpa-urdf-usd-xml/wave_01/       # URDFs (retarget + wireframe)
 │   ├── left_sharpa_wave/
 │   └── right_sharpa_wave/
@@ -31,12 +32,12 @@ vision-teleop/
 ## Pipeline (short)
 
 1. Camera frames → MediaPipe (`single_hand_detector.py`)
-2. Flat-hand calibration → establish neutral position (`hand_calibration.py`)
-3. Per-finger MCP offset/straightening + apply finger landmark scales → processed hand is sent to IK solver (`teleop_hand.py`)
+2. Flat-hand calibration → correction offsets (`hand_calibration.py`)
+3. Frozen palm-span + per-finger MCP→tip scales from neutral vs URDF (`teleop_hand.py`)
+4. Per frame: correct → scale landmarks → `dex-retargeting` → Sharpa `set_joint_position`
+5. Optional wireframe / overlays (`hand_visualization.py`)
 
-Per frame: correct → scale landmarks → retarget → command Sharpa Wave
-Optional wireframe / overlays (`hand_visualization.py`)
-
+YAML `scaling_factor` is overridden to `1.0` at build time so landmark scales alone control size.
 
 ## Where to change paths
 
@@ -60,20 +61,30 @@ CLI overrides: `--config-path`, `--robot-dir`, `--camera-path`.
 **URDF resolution:** `--robot-dir` is usually `wave_01/`. Code resolves to `wave_01/{left,right}_sharpa_wave/`, then:
 
 - Retargeting loads the YAML filename (e.g. `left_sharpa_wave_with_wrist.urdf`) under that side folder via `RetargetingConfig.set_default_urdf_dir`.
-If using a different URDF, adjust the file name within the YAML and `hand_visualization.py` 
+- Wireframe uses `{side}_sharpa_wave.urdf` in the same folder.
 
-The default hand control, if a side is not specified, is left  
+Both files must exist for viz+control modes.
 
 ## Manual setup on a new machine
 
 1. Install Sharpa Wave SDK; set `DEFAULT_SHARPA_SDK_PYTHON` if not `/opt/sharpa-wave-sdk/python`.
-2. Clone / copy this `sharpa-vision-retargeting-sdk` tree (include `supplements/`, `sharpa-urdf-usd-xml/`, and `hand_landmarker.task`).
+2. Clone / copy this `vision-teleop/` tree (include `supplements/` and `sharpa-urdf-usd-xml/`). The MediaPipe model is not included in the repository.
 3. Install dependencies:
    ```bash
    cd vision-teleop
    pip install -r requirements.txt
    ```
 4. Ensure `pinocchio` (`import pin`) works — required for retargeting and wireframe. If pip cannot install `pin`, use conda-forge.
+5. Download the official MediaPipe Hand Landmarker model and verify its SHA-256 digest:
+   ```bash
+   python3 scripts/download_hand_landmarker.py
+   ```
+
+The installer downloads `hand_landmarker/hand_landmarker/float16/1` from Google directly to `supplements/hand_landmarker.task`. To verify an existing download without accessing the network, run:
+
+```bash
+python3 scripts/download_hand_landmarker.py --check
+```
 
 ## Notes about requirements
 
@@ -87,7 +98,7 @@ The default hand control, if a side is not specified, is left
 | `pinocchio` (`pin`) | Needed even if dex-retargeting installs; conda-forge if pip fails |
 | `nlopt` | Usually pulled with dex-retargeting; required for the vector optimizer |
 
-Also: OpenCV needs a display for mode selection and optional visualization
+Also: OpenCV needs a display for `imshow` / mode selection; MediaPipe may use GPU.
 
 ## Run
 
@@ -96,28 +107,27 @@ From this `vision-teleop/` directory:
 ```bash
 cd /opt/sharpa-wave-sdk/vision-teleop   # or your clone path
 
-# Explicit configs  #run sharpa_wave_quest.py with the same configurations if using Meta  Quest
+# Left only (default)
+python3 sharpa_wave_webcam.py
+
+# Explicit configs
 python3 sharpa_wave_webcam.py \
   --config-path supplements/sharpa_wave_left.yml
 
 python3 sharpa_wave_webcam.py \
-  --config-path supplements/sharpa_wave_right.yml --camera-path /dev/video0
+  --config-path supplements/sharpa_wave_right.yml
 
 # Bimanual
 python3 sharpa_wave_webcam.py \
-  --config-path supplements/sharpa_wave_left.yml supplements/sharpa_wave_right.yml --robot-dir ./sharpa-urdf-usd-xml/wave_01 --camera-path /dev/video0
+  --config-path supplements/sharpa_wave_left.yml supplements/sharpa_wave_right.yml
 ```
 
 Modes after calibration: `1` viz+control, `2` viz only, `3` control only (lowest latency).
 
 ## Calibration
 
-Flat-hand prompt writes `calibration/hand_calibration_{left,right}.json`. Recalibrate per operation.  
+Flat-hand prompt writes `calibration/hand_calibration_{left,right}.json`. Recalibrate per operator / camera.
 After calibration, terminal prints frozen palm and per-finger scale factors.
-
-## Scaling
-If YAML `scaling_factor` is set to `1.0`, it is overridden in teleop_hand.py by the custom landmark scale factors calculated during calibration -- the palm and each finger is scaled independently
-If `scaling_factor` is set to any other value, that will be the scaling_factor used -- the custom scale factors will be bypassed
 
 ## Parallel retargeting
 
@@ -125,4 +135,4 @@ Dual mode runs left/right `solve_from_joint_pos` on a thread pool, then commands
 
 ## License / third party
 
-Follow Sharpa, MediaPipe, and `dex-retargeting` licensing for SDK, URDFs, and the `.task` model.
+Follow Sharpa, MediaPipe, and `dex-retargeting` licensing for SDK, URDFs, and runtime dependencies. The MediaPipe model is not distributed with this repository; the installation script obtains the pinned model directly from its official Google URL and verifies SHA-256 before use.

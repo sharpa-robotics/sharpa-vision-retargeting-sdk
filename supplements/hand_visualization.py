@@ -40,7 +40,7 @@ def wireframe_window_name(side: HandSideName) -> str:
 
 
 def default_urdf_path_for_side(side: HandSideName) -> str:
-    return str(DEFAULT_URDF_WAVE01 / f"{side}_sharpa_wave" / f"{side}_sharpa_wave_with_wrist.urdf")
+    return str(DEFAULT_URDF_WAVE01 / f"{side}_sharpa_wave" / f"{side}_sharpa_wave.urdf")
 
 
 DEFAULT_URDF_PATH = default_urdf_path_for_side("left")

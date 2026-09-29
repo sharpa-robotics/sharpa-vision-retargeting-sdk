@@ -32,7 +32,8 @@ OPERATOR2MANO_LEFT = np.array(
 
 # ---------------------------------------------------------------------------
 # Defaults — edit these if your machine layout differs from this repo.
-# Model asset lives next to this module in supplements/.
+# The installer downloads the model asset into supplements/; it is intentionally
+# excluded from source control because it is obtained directly from Google.
 # ---------------------------------------------------------------------------
 SUPPLEMENTS_DIR = Path(__file__).resolve().parent
 DEFAULT_MODEL_PATH = str(SUPPLEMENTS_DIR / "hand_landmarker.task")
@@ -63,6 +64,12 @@ class HandDetector:
         min_tracking_confidence: float = 0.8,
         model_asset_path: str = DEFAULT_MODEL_PATH,
     ):
+        if not Path(model_asset_path).is_file():
+            raise FileNotFoundError(
+                f"MediaPipe hand model not found: {model_asset_path}. "
+                "Run `python3 scripts/download_hand_landmarker.py` from the "
+                "repository root, then retry."
+            )
         base_options = mp.tasks.BaseOptions(
             model_asset_path=model_asset_path,
             delegate=mp.tasks.BaseOptions.Delegate.CPU,
